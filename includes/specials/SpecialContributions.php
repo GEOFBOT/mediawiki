@@ -132,39 +132,13 @@ class SpecialContributions extends IncludableSpecialPage {
 			$this->opts['year'] = '';
 			$this->opts['month'] = '';
 		} else {
-			$this->opts['year'] = $request->getIntOrNull( 'year' );
-			$this->opts['month'] = $request->getIntOrNull( 'month' );
+			$this->opts['year'] = $request->getVal( 'year' );
+			$this->opts['month'] = $request->getVal( 'month' );
 		}
 
 		$this->opts['start'] = $request->getVal( 'start' );
 		$this->opts['end'] = $request->getVal( 'end' );
-		if (
-			$this->opts['start'] !== '' &&
-			$this->opts['end'] !== '' &&
-			$this->opts['start'] > $this->opts['end']
-		) {
-			$temp = $this->opts['start'];
-			$this->opts['start'] = $this->opts['end'];
-			$this->opts['end'] = $temp;
-		}
-
-		// If year/month legacy filtering options are set, convert them to display the new stamp
-		$year = $this->opts['year'];
-		$month = $this->opts['month'];
-		if ( isset( $year ) || isset( $month ) ) {
-			// Reuse getDateCond logic, but subtract a day because
-			// the endpoints of our date range appear inclusive
-			// but the internal end offsets are always exclusive
-			$legacyTimestamp = ( new ContribsPager( $this->getContext(), [] ) )
-				->getDateCond( $year, $month );
-			$legacyTimestamp = new DateTime( $legacyTimestamp );
-			$legacyTimestamp = $legacyTimestamp->modify( '-1 day' );
-
-			// Clear the new timestamp range options if used and
-			// replace with the converted legacy timestamp
-			$this->opts['start'] = '';
-			$this->opts['end'] = date( 'Y-m-d', $legacyTimestamp->getTimestamp() );
-		}
+		$this->opts = $this->processDateFilter( $this->opts );
 
 		$feedType = $request->getVal( 'feed' );
 
@@ -754,6 +728,49 @@ class SpecialContributions extends IncludableSpecialPage {
 		}
 		// Autocomplete subpage as user list - public to allow caching
 		return UserNamePrefixSearch::search( 'public', $search, $limit, $offset );
+	}
+
+	/**
+	 * Set up date filter options, given request data.
+	 *
+	 * @param array $opts Options array
+	 * @return array Options array with final start and end options
+	 */
+	public function processDateFilter( $opts ) {
+		$start = $opts['start'] ?: '';
+		$end = $opts['end'] ?: '';
+		$year = $opts['year'] ?: '';
+		$month = $opts['month'] ?: '';
+
+		if ( $start !== '' && $end !== '' &&
+		     $start > $end
+		) {
+			$temp = $start;
+			$start = $end;
+			$end = $temp;
+		}
+
+		// If year/month legacy filtering options are set, convert them to display the new stamp
+		if ( isset( $year ) || isset( $month ) ) {
+			// Reuse getDateCond logic, but subtract a day because
+			// the endpoints of our date range appear inclusive
+			// but the internal end offsets are always exclusive
+			$legacyTimestamp =
+				( new ContribsPager( $this->getContext(), [] ) )->getDateCond( $year, $month );
+			$legacyTimestamp = new DateTime( $legacyTimestamp );
+			$legacyTimestamp = $legacyTimestamp->modify( '-1 day' );
+
+			// Clear the new timestamp range options if used and
+			// replace with the converted legacy timestamp
+			$start = '';
+			$end = date( 'Y-m-d', $legacyTimestamp->getTimestamp() );
+		}
+
+		$opts['start'] = $start;
+		$opts['end'] = $end;
+		unset( $opts['year'] );
+		unset( $opts['month'] );
+		return $opts;
 	}
 
 	protected function getGroupName() {
